@@ -23,7 +23,7 @@ from devices.services import (
     create_cleaning_record, create_suspend_record, create_inspect_record,
     create_review_record, create_restore_record,
     get_pending_review_list, get_area_issue_distribution,
-    get_responsible_person_time_ranking,
+    get_responsible_person_time_ranking, get_inspection_reminder_statistics,
 )
 from devices.filters import DeviceFilter, DeviceRecordFilter
 
@@ -86,7 +86,11 @@ class DeviceListCreateView(generics.ListCreateAPIView):
 
 class DeviceDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Device.objects.select_related('area', 'responsible_person').all()
-    permission_classes = [IsAdmin]
+
+    def get_permissions(self):
+        if self.request.method in ['PUT', 'PATCH', 'DELETE']:
+            return [IsAdmin()]
+        return [IsAuthenticated()]
 
     def get_serializer_class(self):
         if self.request.method in ['PUT', 'PATCH']:
@@ -376,3 +380,11 @@ class ResponsiblePersonTimeRankingView(APIView):
                 'avg_duration_display': str(avg) if avg else None,
             })
         return Response(result)
+
+
+class InspectionReminderStatisticsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        data = get_inspection_reminder_statistics()
+        return Response(data)

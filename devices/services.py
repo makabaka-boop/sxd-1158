@@ -1,7 +1,8 @@
 from django.utils import timezone
-from django.db.models import Count, F, DurationField, ExpressionWrapper, Avg
+from django.db.models import Count, F, DurationField, ExpressionWrapper, Avg, Q, IntegerField
 from devices.models import (
     Device, DeviceRecord, DeviceStatus, RecordType, Role,
+    InspectionStatus, INSPECTION_WARNING_DAYS,
 )
 
 
@@ -297,3 +298,135 @@ def get_responsible_person_time_ranking():
         .order_by('avg_duration')
     )
     return records
+
+
+def _get_days_expr():
+    today = timezone.now().date()
+    return ExpressionWrapper(
+        F('last_inspection_date') + F('inspection_cycle_days') - today,
+        output_field=IntegerField()
+    )
+
+
+def get_overdue_devices():
+    days_expr = _get_days_expr()
+    no_last = Q(last_inspection_date__isnull=True)
+    overdue = Q(last_inspection_date__isnull=False) & Q(days__lt=0)
+    return (
+        Device.objects
+        .select_related('area', 'responsible_person')
+        .annotate(days=days_expr)
+        .filter(no_last | overdue)
+        .order_by('last_inspection_date')
+    )
+
+
+def get_due_soon_devices():
+    days_expr = _get_days_expr()
+    return (
+        Device.objects
+        .select_related('area', 'responsible_person')
+        .annotate(days=days_expr)
+        .filter(last_inspection_date__isnull=False, days__gte=0, days__lte=INSPECTION_WARNING_DAYS)
+        .order_by('days')
+    )
+
+
+def get_inspection_summary_by_area():
+    days_expr = _get_days_expr()
+    annotated_qs = Device.objects.annotate(days=days_expr)
+    overdue_qs = annotated_qs.filter(
+        Q(last_inspection_date__isnull=True) | Q(days__lt=0)
+    )
+    due_soon_qs = annotated_qs.filter(
+        last_inspection_date__isnull=False, days__gte=0, days__lte=INSPECTION_WARNING_DAYS
+    )
+    overdue_data = list(
+        overdue_qs
+        .values(aid=F('area__id'), aname=F('area__name'))
+        .annotate(count=Count('id'))
+    )
+    due_soon_data = list(
+        due_soon_qs
+        .values(aid=F('area__id'), aname=F('area__name'))
+        .annotate(count=Count('id'))
+    )
+    overdue_map = {item['aid']: item['count'] for item in overdue_data}
+    due_soon_map = {item['aid']: item['count'] for item in due_soon_data}
+    all_areas = list(
+        Device.objects
+        .values(aid=F('area__id'), aname=F('area__name'))
+        .distinct()
+    )
+    seen = set()
+    result = []
+    for a in all_areas:
+        aid = a['aid']
+        if aid in seen:
+            continue
+        seen.add(aid)
+        result.append({
+            'area_id': aid,
+            'area_name': a['aname'] or '未分配区域',
+            'overdue_count': overdue_map.get(aid, 0),
+            'due_soon_count': due_soon_map.get(aid, 0),
+        })
+    result.sort(key=lambda x: -(x['overdue_count'] + x['due_soon_count']))
+    return result
+
+
+def get_inspection_summary_by_responsible_person():
+    days_expr = _get_days_expr()
+    annotated_qs = Device.objects.annotate(days=days_expr)
+    overdue_qs = annotated_qs.filter(
+        Q(last_inspection_date__isnull=True) | Q(days__lt=0)
+    )
+    due_soon_qs = annotated_qs.filter(
+        last_inspection_date__isnull=False, days__gte=0, days__lte=INSPECTION_WARNING_DAYS
+    )
+    overdue_data = list(
+        overdue_qs
+        .values(pid=F('responsible_person__id'), pname=F('responsible_person__username'))
+        .annotate(count=Count('id'))
+    )
+    due_soon_data = list(
+        due_soon_qs
+        .values(pid=F('responsible_person__id'), pname=F('responsible_person__username'))
+        .annotate(count=Count('id'))
+    )
+    overdue_map = {item['pid']: item['count'] for item in overdue_data}
+    due_soon_map = {item['pid']: item['count'] for item in due_soon_data}
+    all_persons = list(
+        Device.objects
+        .values(pid=F('responsible_person__id'), pname=F('responsible_person__username'))
+        .distinct()
+    )
+    seen = set()
+    result = []
+    for p in all_persons:
+        pid = p['pid']
+        if pid in seen:
+            continue
+        seen.add(pid)
+        result.append({
+            'responsible_person_id': pid,
+            'responsible_person_name': p['pname'] or '未指定责任人',
+            'overdue_count': overdue_map.get(pid, 0),
+            'due_soon_count': due_soon_map.get(pid, 0),
+        })
+    result.sort(key=lambda x: -(x['overdue_count'] + x['due_soon_count']))
+    return result
+
+
+def get_inspection_reminder_statistics():
+    from devices.serializers import DeviceListSerializer
+    overdue_devices = get_overdue_devices()
+    due_soon_devices = get_due_soon_devices()
+    return {
+        'total_overdue': overdue_devices.count(),
+        'total_due_soon': due_soon_devices.count(),
+        'overdue_devices': DeviceListSerializer(overdue_devices, many=True).data,
+        'due_soon_devices': DeviceListSerializer(due_soon_devices, many=True).data,
+        'summary_by_area': get_inspection_summary_by_area(),
+        'summary_by_responsible_person': get_inspection_summary_by_responsible_person(),
+    }

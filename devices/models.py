@@ -1,5 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
+from django.utils import timezone
+from datetime import timedelta
 
 
 class Role(models.TextChoices):
@@ -23,6 +25,15 @@ class DeviceStatus(models.TextChoices):
     PENDING_REVIEW = 'pending_review', '待复核'
     RESTORED = 'restored', '恢复可用'
     SUSPENDED = 'suspended', '停用留置'
+
+
+class InspectionStatus(models.TextChoices):
+    NOT_DUE = 'not_due', '未到期'
+    DUE_SOON = 'due_soon', '即将到期'
+    OVERDUE = 'overdue', '已逾期'
+
+
+INSPECTION_WARNING_DAYS = 7
 
 
 class RecordType(models.TextChoices):
@@ -90,6 +101,35 @@ class Device(models.Model):
 
     def __str__(self):
         return f'{self.get_category_display()} - {self.code}'
+
+    @property
+    def next_inspection_date(self):
+        if not self.last_inspection_date:
+            return None
+        return self.last_inspection_date + timedelta(days=self.inspection_cycle_days)
+
+    @property
+    def days_until_inspection(self):
+        next_date = self.next_inspection_date
+        if next_date is None:
+            return None
+        today = timezone.now().date()
+        return (next_date - today).days
+
+    @property
+    def inspection_status(self):
+        days = self.days_until_inspection
+        if days is None:
+            return InspectionStatus.OVERDUE
+        if days < 0:
+            return InspectionStatus.OVERDUE
+        if days <= INSPECTION_WARNING_DAYS:
+            return InspectionStatus.DUE_SOON
+        return InspectionStatus.NOT_DUE
+
+    @property
+    def inspection_status_display(self):
+        return InspectionStatus(self.inspection_status).label
 
 
 class DeviceRecord(models.Model):

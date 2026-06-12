@@ -10,7 +10,7 @@ from devices.views import (
     InspectView, ReviewConfirmView, RestoreView,
     DeviceRecordListView,
     PendingReviewListView, AreaIssueDistributionView,
-    ResponsiblePersonTimeRankingView,
+    ResponsiblePersonTimeRankingView, InspectionReminderStatisticsView,
 )
 
 urlpatterns = [
@@ -41,4 +41,5 @@ urlpatterns = [
     path('stats/pending-review/', PendingReviewListView.as_view(), name='pending-review'),
     path('stats/area-issues/', AreaIssueDistributionView.as_view(), name='area-issues'),
     path('stats/responsible-time/', ResponsiblePersonTimeRankingView.as_view(), name='responsible-time'),
+    path('stats/inspection-reminder/', InspectionReminderStatisticsView.as_view(), name='inspection-reminder'),
 ]

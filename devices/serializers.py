@@ -67,6 +67,10 @@ class DeviceListSerializer(serializers.ModelSerializer):
     responsible_person_name = serializers.CharField(
         source='responsible_person.username', default='', read_only=True
     )
+    next_inspection_date = serializers.DateField(read_only=True)
+    days_until_inspection = serializers.IntegerField(read_only=True)
+    inspection_status = serializers.CharField(read_only=True)
+    inspection_status_display = serializers.CharField(read_only=True)
 
     class Meta:
         model = Device
@@ -74,7 +78,9 @@ class DeviceListSerializer(serializers.ModelSerializer):
             'id', 'category', 'category_display', 'code', 'name',
             'area', 'area_name', 'responsible_person', 'responsible_person_name',
             'inspection_cycle_days', 'status', 'status_display',
-            'last_inspection_date', 'created_at', 'updated_at',
+            'last_inspection_date', 'next_inspection_date',
+            'days_until_inspection', 'inspection_status', 'inspection_status_display',
+            'created_at', 'updated_at',
         ]
 
 
