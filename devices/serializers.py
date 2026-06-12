@@ -30,7 +30,11 @@ class UserSerializer(serializers.ModelSerializer):
             email=validated_data.get('email', ''),
             password=password,
         )
-        UserProfile.objects.create(user=user, **profile_data)
+        if profile_data:
+            UserProfile.objects.update_or_create(
+                user=user,
+                defaults=profile_data,
+            )
         return user
 
     def update(self, instance, validated_data):

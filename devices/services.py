@@ -108,6 +108,12 @@ def create_record(device, record_type, operator, description='', fault_level=Non
 
 
 def create_fault_record(device, operator, fault_level, description=''):
+    if device.status == DeviceStatus.BORROWED:
+        DeviceRecord.objects.filter(
+            device=device,
+            record_type=RecordType.BORROW,
+            is_active=True,
+        ).update(is_active=False)
     return create_record(
         device=device,
         record_type=RecordType.FAULT,
@@ -218,11 +224,15 @@ def create_review_record(record_id, reviewer, review_comment):
         reviewed_at=timezone.now(),
     )
 
-    original.reviewer = reviewer
-    original.review_comment = review_comment
-    original.reviewed_at = timezone.now()
-    original.is_active = False
-    original.save()
+    DeviceRecord.objects.filter(
+        device=device,
+        is_active=True,
+    ).update(
+        reviewer=reviewer,
+        review_comment=review_comment,
+        reviewed_at=timezone.now(),
+        is_active=False,
+    )
 
     device.status = new_status
     device.save(update_fields=['status', 'updated_at'])

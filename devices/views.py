@@ -53,7 +53,11 @@ class UserListView(generics.ListAPIView):
 class AreaListCreateView(generics.ListCreateAPIView):
     queryset = Area.objects.all()
     serializer_class = AreaSerializer
-    permission_classes = [IsAdminOrDuty]
+
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [IsAdmin()]
+        return [IsAuthenticated()]
 
 
 class AreaDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -64,8 +68,12 @@ class AreaDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class DeviceListCreateView(generics.ListCreateAPIView):
     queryset = Device.objects.select_related('area', 'responsible_person').all()
-    permission_classes = [IsAuthenticated]
     filterset_class = DeviceFilter
+
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [IsAdmin()]
+        return [IsAuthenticated()]
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -246,7 +254,7 @@ class SuspendView(APIView):
 
 
 class InspectView(APIView):
-    permission_classes = [IsAdminOrReviewer]
+    permission_classes = [IsAdmin]
 
     def post(self, request):
         serializer = InspectSerializer(data=request.data)
